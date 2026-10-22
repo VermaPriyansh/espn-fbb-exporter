@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="../css/popup.css">
+  </head>
+  <body>
+    <div class="popup-container">
+      <div id="league-name" class="league-name"></div>
+      <div id="team-count" class="team-count"></div>
+
+      <div class="button-group">
+        <button id="btn-sync" class="btn-primary" disabled>Sync to Optimizer</button>
+        <button id="btn-download" class="btn-secondary" disabled>Download Bundle (JSON)</button>
+      </div>
+
+      <div class="settings-group">
+        <label for="target-url" class="settings-label">Optimizer URL:</label>
+        <input type="text" id="target-url" class="settings-input" placeholder="http://localhost:8501 or https://*.streamlit.app" value="http://localhost:8501">
+      </div>
+
+      <div id="progress-line" class="progress-line"></div>
+      <div id="error-line" class="error-line"></div>
+    </div>
+    <script src="../js/popup.js"></script>
+  </body>
+</html>
