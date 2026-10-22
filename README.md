@@ -67,7 +67,7 @@ A lightweight, zero-dependency Chrome extension (Manifest V3) that exports compl
 │   ├── icon48.png      # 48x48 icon (Extensions management page)
 │   └── icon128.png     # 128x128 icon (Web Store / installation)
 ├── js/
-│   ├── content_streamlit.js # Automated st.file_uploader & Cloud Run DOM bridge
+│   ├── content_streamlit.js # Automated Cloud Run & FastAPI/Uvicorn optimizer bridge
 │   └── popup.js            # Data fetch orchestration & bundle assembly
 ├── LICENSE             # MIT License
 ├── manifest.json       # Chrome Manifest V3 configuration

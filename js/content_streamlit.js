@@ -1,5 +1,5 @@
 // Copyright 2026 ESPN Fantasy Basketball Data Exporter
-// Optimizer Content Script Bridge (Cloud Run Optimizer + Streamlit st.file_uploader)
+// Optimizer Content Script Bridge (Native FastAPI/Uvicorn Stack)
 
 'use strict';
 
@@ -40,79 +40,31 @@
     }, 4500);
   }
 
-  function waitForElement(selectors, timeout = 20000) {
-    return new Promise((resolve, reject) => {
-      for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el) return resolve(el);
-      }
-
-      const observer = new MutationObserver(() => {
-        for (const sel of selectors) {
-          const el = document.querySelector(sel);
-          if (el) {
-            observer.disconnect();
-            return resolve(el);
-          }
-        }
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(`Timeout waiting for (${selectors.join(', ')})`));
-      }, timeout);
-    });
-  }
-
   async function injectIntoCloudRunApp(syncData) {
-    // 1. Open League Settings sidebar if collapsed
-    const details = document.querySelector('summary')?.closest('details') || document.querySelector('details');
-    if (details && !details.open) details.open = true;
+    let bundleIngested = false;
 
-    // 2. Select Season Mode if mode selector exists
-    const modeWrapper = document.querySelector('[data-testid="ls-mode-wrapper"]');
-    const modeInput = document.getElementById('ls-mode');
-    if (modeWrapper && modeInput && modeInput.value !== 'Season Mode') {
-      const modeSearch = modeWrapper.querySelector('.cs-search-input');
-      modeSearch?.dispatchEvent(new Event('focus'));
-      modeSearch?.dispatchEvent(new Event('click'));
-      const seasonOpt = Array.from(modeWrapper.querySelectorAll('.cs-option') || []).find(o => o.textContent?.includes('Season'));
-      if (seasonOpt) {
-        seasonOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    // 1. Post the complete extracted bundle JSON directly to the backend API endpoint
+    if (syncData.bundle) {
+      try {
+        const resp = await fetch('/platforms/espn/bundle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(syncData.bundle),
+          credentials: 'include'
+        });
+        if (resp.ok) {
+          bundleIngested = true;
+          const result = await resp.json();
+          console.log('[ESPN Exporter] Ingested bundle into backend:', result);
+        }
+      } catch (e) {
+        console.warn('[ESPN Exporter] Bundle POST error, falling back to DOM inputs:', e);
       }
     }
 
-    // 3. Select 'Retrieve from ESPN' platform
-    const platformWrapper = document.querySelector('[data-testid="ls-platform-wrapper"]');
-    const platformInput = document.getElementById('ls-platform');
-    if (platformWrapper && platformInput && platformInput.value !== 'Retrieve from ESPN') {
-      const platformSearch = platformWrapper.querySelector('.cs-search-input');
-      platformSearch?.dispatchEvent(new Event('focus'));
-      platformSearch?.dispatchEvent(new Event('click'));
-      const espnOpt = Array.from(platformWrapper.querySelectorAll('.cs-option') || []).find(o => o.textContent?.includes('ESPN'));
-      if (espnOpt) {
-        espnOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      } else {
-        platformInput.value = 'Retrieve from ESPN';
-        platformWrapper.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }
-
-    // 4. Fill in League ID
-    const leagueIdInput = document.getElementById('ls-espn-league-id');
-    if (leagueIdInput && syncData.league_id) {
-      leagueIdInput.value = syncData.league_url || syncData.league_id;
-      leagueIdInput.dispatchEvent(new Event('input', { bubbles: true }));
-      leagueIdInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    // 5. Fill in ambient ESPN cookies if present
+    // 2. Also populate the ambient credentials inputs in the sidebar if present
     const s2Input = document.getElementById('ls-espn-s2');
     const swidInput = document.getElementById('ls-espn-swid');
-    let credentialsSaved = false;
-
     if (s2Input && syncData.espn_s2) {
       s2Input.value = syncData.espn_s2;
       s2Input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -124,49 +76,19 @@
       swidInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // If both cookies populated, click 'Save credentials'
-    if (syncData.espn_s2 && syncData.swid) {
-      const saveBtn = document.querySelector('#ls-espn-wrap button.section-apply-btn');
-      if (saveBtn) {
-        saveBtn.click();
-        credentialsSaved = true;
-      }
-    }
+    // 3. Dispatch a window message so the frontend UI immediately selects the synced league
+    window.postMessage({
+      type: 'ESPN_BUNDLE_SYNCED',
+      league_id: String(syncData.league_id),
+      league_name: syncData.bundle?.league?.name || `ESPN League #${syncData.league_id}`,
+      season_id: String(syncData.season_id)
+    }, '*');
 
-    const msg = credentialsSaved
-      ? `Synced ESPN League #${syncData.league_id} & credentials to Optimizer!`
-      : `Synced ESPN League #${syncData.league_id} to Optimizer!`;
+    const msg = bundleIngested
+      ? `Synced ESPN League #${syncData.league_id} to Optimizer!`
+      : `Synced ESPN credentials for League #${syncData.league_id}!`;
 
     showSyncBadge(msg);
-  }
-
-  async function injectIntoStreamlitApp(bundle) {
-    const selectors = [
-      'div[data-testid="stFileUploader"] input[type="file"]',
-      'div[data-testid="stFileUploaderDropzoneInput"] input[type="file"]',
-      'input[type="file"]'
-    ];
-
-    const fileInput = await waitForElement(selectors);
-
-    const leagueId = bundle.league_id || (bundle.metadata && bundle.metadata.league_id) || 'league';
-    const seasonId = bundle.season_id || (bundle.metadata && bundle.metadata.season_id) || '2027';
-    const periodId = bundle.scoring_period_id || (bundle.metadata && bundle.metadata.scoring_period_id) || '0';
-    const fileName = `espn_fba_${leagueId}_${seasonId}_p${periodId}.json`;
-
-    // Construct File and DataTransfer
-    const jsonString = JSON.stringify(bundle, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const file = new File([blob], fileName, { type: 'application/json' });
-
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    fileInput.files = dt.files;
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-    showSyncBadge(`Synced ${fileName} to Optimizer!`);
   }
 
   async function checkAndInjectBundle() {
@@ -197,19 +119,7 @@
       }
 
       isInjecting = true;
-
-      // Detect if we are on the Cloud Run Fantasy Sports Optimizer app
-      const isCloudRunApp = Boolean(
-        document.getElementById('ls-espn-wrap') ||
-        document.querySelector('[data-testid="ls-platform-wrapper"]') ||
-        window.location.hostname.includes('run.app')
-      );
-
-      if (isCloudRunApp) {
-        await injectIntoCloudRunApp(syncData);
-      } else {
-        await injectIntoStreamlitApp(bundle || syncData.bundle);
-      }
+      await injectIntoCloudRunApp(syncData);
 
       // Clean up storage so subsequent page reloads don't re-upload stale bundle
       await chrome.storage.local.remove(['pending_streamlit_bundle', 'pending_optimizer_sync', 'bundle_timestamp']);
@@ -225,7 +135,7 @@
 
   // 2. Listen for runtime messages from popup (when tab is already open)
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg && msg.action === 'STREAMLIT_SYNC_TRIGGER') {
+    if (msg && (msg.action === 'STREAMLIT_SYNC_TRIGGER' || msg.action === 'OPTIMIZER_SYNC_TRIGGER')) {
       checkAndInjectBundle();
       sendResponse({ status: 'started' });
     }

@@ -773,11 +773,24 @@ async function handleDownload() {
 }
 
 // ── Automated Optimizer Sync ────────────────────────────────────────────────
-const DEFAULT_OPTIMIZER_URL = 'http://localhost:8501';
 
 async function handleSync() {
   if (!activeLeagueId) {
     setError('No league ID detected. Please open an ESPN Fantasy Basketball league page.');
+    return;
+  }
+
+  const targetUrl = (targetUrlInput.value || '').trim();
+  if (!targetUrl) {
+    setError('Please enter your Optimizer URL below before syncing.');
+    return;
+  }
+
+  let targetUrlObj;
+  try {
+    targetUrlObj = new URL(targetUrl);
+  } catch (e) {
+    setError('Invalid Optimizer URL format. Please include http:// or https://');
     return;
   }
 
@@ -786,7 +799,6 @@ async function handleSync() {
 
   try {
     const { bundle, seasonId, scoringPeriodId } = await buildBundle();
-    const targetUrl = (targetUrlInput.value || DEFAULT_OPTIMIZER_URL).trim();
     setProgress('Saving bundle & connecting to Optimizer...');
 
     // Extract ambient ESPN session cookies if available
@@ -815,13 +827,6 @@ async function handleSync() {
       },
       bundle_timestamp: Date.now()
     });
-
-    let targetUrlObj;
-    try {
-      targetUrlObj = new URL(targetUrl);
-    } catch (e) {
-      targetUrlObj = new URL(DEFAULT_OPTIMIZER_URL);
-    }
 
     const allTabs = await chrome.tabs.query({});
     const matchingTab = allTabs.find(t => {
@@ -864,16 +869,21 @@ async function handleSync() {
 async function init() {
   try {
     // Restore saved Optimizer URL preference
-    const stored = await chrome.storage.local.get(['streamlit_target_url']);
-    if (stored && stored.streamlit_target_url) {
-      targetUrlInput.value = stored.streamlit_target_url;
-    } else {
-      targetUrlInput.value = DEFAULT_OPTIMIZER_URL;
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      const stored = await chrome.storage.local.get(['streamlit_target_url']);
+      if (stored && stored.streamlit_target_url) {
+        targetUrlInput.value = stored.streamlit_target_url;
+      }
+
+      targetUrlInput.addEventListener('input', () => {
+        chrome.storage.local.set({ streamlit_target_url: targetUrlInput.value.trim() });
+      });
     }
 
-    targetUrlInput.addEventListener('input', () => {
-      chrome.storage.local.set({ streamlit_target_url: targetUrlInput.value.trim() });
-    });
+    if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.query) {
+      setError('Please open in Chrome extension context.');
+      return;
+    }
 
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tabs || tabs.length === 0) {
