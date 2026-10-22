@@ -15,8 +15,14 @@
       </div>
 
       <div class="settings-group">
-        <label for="target-url" class="settings-label">Optimizer URL:</label>
-        <input type="text" id="target-url" class="settings-input" placeholder="https://*.run.app or http://localhost:8080">
+        <div class="settings-header">
+          <label for="target-url" class="settings-label">Default Optimizer URL:</label>
+          <span id="save-status" class="save-status"></span>
+        </div>
+        <div class="settings-row">
+          <input type="text" id="target-url" class="settings-input" placeholder="e.g. http://localhost:8080 or https://...">
+          <button id="btn-save-url" class="btn-save" title="Save as default Optimizer URL">Save</button>
+        </div>
       </div>
 
       <div id="progress-line" class="progress-line"></div>

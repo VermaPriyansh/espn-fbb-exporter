@@ -1,5 +1,5 @@
 // Copyright 2026 ESPN Fantasy Basketball Data Exporter
-// Optimizer Content Script Bridge (Native FastAPI/Uvicorn Stack)
+// Generic Optimizer Content Script Bridge
 
 'use strict';
 
@@ -40,29 +40,31 @@
     }, 4500);
   }
 
-  async function injectIntoCloudRunApp(syncData) {
+  async function injectIntoOptimizerApp(syncData) {
     let bundleIngested = false;
 
-    // 1. Post the complete extracted bundle JSON directly to the backend API endpoint
+    // 1. Post the complete extracted bundle JSON directly to backend API endpoints
     if (syncData.bundle) {
-      try {
-        const resp = await fetch('/platforms/espn/bundle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(syncData.bundle),
-          credentials: 'include'
-        });
-        if (resp.ok) {
-          bundleIngested = true;
-          const result = await resp.json();
-          console.log('[ESPN Exporter] Ingested bundle into backend:', result);
-        }
-      } catch (e) {
-        console.warn('[ESPN Exporter] Bundle POST error, falling back to DOM inputs:', e);
+      const endpoints = ['/platforms/espn/bundle', '/api/espn/bundle', '/api/bundle'];
+      for (const endpoint of endpoints) {
+        try {
+          const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(syncData.bundle),
+            credentials: 'include'
+          });
+          if (resp.ok) {
+            bundleIngested = true;
+            const result = await resp.json().catch(() => ({}));
+            console.log(`[ESPN Exporter] Ingested bundle into backend via ${endpoint}:`, result);
+            break;
+          }
+        } catch (_) {}
       }
     }
 
-    // 2. Also populate the ambient credentials inputs in the sidebar if present
+    // 2. Also populate ambient credentials inputs in the page if present
     const s2Input = document.getElementById('ls-espn-s2');
     const swidInput = document.getElementById('ls-espn-swid');
     if (s2Input && syncData.espn_s2) {
@@ -76,13 +78,33 @@
       swidInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // 3. Dispatch a window message so the frontend UI immediately selects the synced league
+    // 3. Dispatch window message for frontend web apps
     window.postMessage({
       type: 'ESPN_BUNDLE_SYNCED',
       league_id: String(syncData.league_id),
       league_name: syncData.bundle?.league?.name || `ESPN League #${syncData.league_id}`,
-      season_id: String(syncData.season_id)
+      season_id: String(syncData.season_id),
+      bundle: syncData.bundle
     }, '*');
+
+    // 4. Dispatch custom DOM event
+    try {
+      window.dispatchEvent(new CustomEvent('espn-bundle-synced', {
+        detail: {
+          league_id: String(syncData.league_id),
+          league_name: syncData.bundle?.league?.name || `ESPN League #${syncData.league_id}`,
+          season_id: String(syncData.season_id),
+          bundle: syncData.bundle
+        }
+      }));
+    } catch (_) {}
+
+    // 5. Store in sessionStorage for client-side single page applications
+    try {
+      if (syncData.bundle) {
+        window.sessionStorage.setItem('espn_fba_bundle', JSON.stringify(syncData.bundle));
+      }
+    } catch (_) {}
 
     const msg = bundleIngested
       ? `Synced ESPN League #${syncData.league_id} to Optimizer!`
@@ -96,12 +118,13 @@
 
     try {
       const data = await chrome.storage.local.get([
+        'pending_optimizer_bundle',
         'pending_streamlit_bundle',
         'pending_optimizer_sync',
         'bundle_timestamp'
       ]);
 
-      const bundle = data.pending_streamlit_bundle;
+      const bundle = data.pending_optimizer_bundle || data.pending_streamlit_bundle;
       const syncData = data.pending_optimizer_sync || (bundle ? {
         league_id: bundle.league_id || bundle.metadata?.league_id,
         season_id: bundle.season_id || bundle.metadata?.season_id,
@@ -114,15 +137,25 @@
 
       // Only inject fresh bundles created within the last 60 seconds
       if (!timestamp || (Date.now() - timestamp > 60000)) {
-        await chrome.storage.local.remove(['pending_streamlit_bundle', 'pending_optimizer_sync', 'bundle_timestamp']);
+        await chrome.storage.local.remove([
+          'pending_optimizer_bundle',
+          'pending_streamlit_bundle',
+          'pending_optimizer_sync',
+          'bundle_timestamp'
+        ]);
         return;
       }
 
       isInjecting = true;
-      await injectIntoCloudRunApp(syncData);
+      await injectIntoOptimizerApp(syncData);
 
       // Clean up storage so subsequent page reloads don't re-upload stale bundle
-      await chrome.storage.local.remove(['pending_streamlit_bundle', 'pending_optimizer_sync', 'bundle_timestamp']);
+      await chrome.storage.local.remove([
+        'pending_optimizer_bundle',
+        'pending_streamlit_bundle',
+        'pending_optimizer_sync',
+        'bundle_timestamp'
+      ]);
     } catch (err) {
       console.warn('[ESPN Exporter Bridge] Injection error:', err.message);
     } finally {
@@ -143,7 +176,7 @@
 
   // 3. Listen for storage changes in real-time
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && (changes.pending_streamlit_bundle?.newValue || changes.pending_optimizer_sync?.newValue)) {
+    if (area === 'local' && (changes.pending_optimizer_bundle?.newValue || changes.pending_streamlit_bundle?.newValue || changes.pending_optimizer_sync?.newValue)) {
       checkAndInjectBundle();
     }
   });

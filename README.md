@@ -1,6 +1,6 @@
 # ESPN Fantasy Basketball Data Exporter
 
-A lightweight, zero-dependency Chrome extension (Manifest V3) that exports complete ESPN Fantasy Basketball league data into a structured JSON bundle (`espn_fba_bundle_v1`) and connects seamlessly to local and cloud-hosted Fantasy Sports Optimizers.
+A lightweight, zero-dependency Chrome extension (Manifest V3) that exports complete ESPN Fantasy Basketball league data into a structured JSON bundle (`espn_fba_bundle_v1`) and connects seamlessly to local and cloud-hosted fantasy basketball optimizers, custom analytics, and modeling tools.
 
 ---
 
@@ -14,9 +14,9 @@ A lightweight, zero-dependency Chrome extension (Manifest V3) that exports compl
   - **Free Agent Pool**: Available players with ownership percentages and eligibility slots.
   - **NBA Pro Schedule**: 30-team NBA schedule indexed by weekly matchup periods and daily scoring periods.
 - **Zero-Friction Optimizer Bridge**:
-  - **Sync to Optimizer**: Automatically extracts your active ESPN league ID and session cookies (`espn_s2`, `SWID`), connects to the deployed Optimizer app, and populates the platform connection settings with zero user typing or cookie inspection.
+  - **Sync to Optimizer**: Automatically extracts your active ESPN league ID and session cookies (`espn_s2`, `SWID`), connects to your configured optimizer, and synchronizes the complete bundle.
   - **Download Bundle (JSON)**: Preserved as a manual offline backup that saves `espn_fba_<leagueId>_<seasonId>_p<scoringPeriodId>.json` directly to your downloads.
-  - **Configurable Target**: Configurable to your local dev instance (`http://localhost:8501`, `http://localhost:8080`) or any cloud-hosted optimizer deployment (`https://*.streamlit.app`, `https://*.run.app`). The URL is saved across sessions in local extension storage.
+  - **Configurable Default Optimizer URL**: Set and save your preferred optimizer endpoint (local development or cloud deployment) directly in the extension popup with one click.
 - **Privacy & Security First**:
   - Runs 100% locally in your browser popup.
   - Zero external tracking, analytics, or third-party servers.
@@ -67,7 +67,7 @@ A lightweight, zero-dependency Chrome extension (Manifest V3) that exports compl
 │   ├── icon48.png      # 48x48 icon (Extensions management page)
 │   └── icon128.png     # 128x128 icon (Web Store / installation)
 ├── js/
-│   ├── content_streamlit.js # Automated Cloud Run & FastAPI/Uvicorn optimizer bridge
+│   ├── content_streamlit.js # Automated content script bridge for optimizer web apps
 │   └── popup.js            # Data fetch orchestration & bundle assembly
 ├── LICENSE             # MIT License
 ├── manifest.json       # Chrome Manifest V3 configuration

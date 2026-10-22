@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ESPN Fantasy Basketball Data Exporter",
-  "version": "3.2.0",
-  "description": "Exports ESPN Fantasy Basketball league data for the Fantasy Basketball Optimizer.",
+  "version": "3.3.0",
+  "description": "Exports ESPN Fantasy Basketball league data into structured JSON bundles for fantasy basketball optimizers and analytics tools.",
   "action": {
     "default_popup": "html/popup.html",
     "default_icon": {
@@ -31,6 +31,9 @@
     "*://*.streamlit.app/*",
     "http://localhost:8501/*",
     "http://localhost:8080/*",
+    "http://localhost:8000/*",
+    "http://localhost:5000/*",
+    "http://localhost:3000/*",
     "https://*.run.app/*",
     "*://*.run.app/*"
   ],
@@ -40,6 +43,9 @@
         "*://*.streamlit.app/*",
         "http://localhost:8501/*",
         "http://localhost:8080/*",
+        "http://localhost:8000/*",
+        "http://localhost:5000/*",
+        "http://localhost:3000/*",
         "https://*.run.app/*",
         "*://*.run.app/*"
       ],

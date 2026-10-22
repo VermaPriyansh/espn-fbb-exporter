@@ -51,11 +51,42 @@ const teamCountEl = document.getElementById('team-count');
 const btnSync = document.getElementById('btn-sync');
 const btnDownload = document.getElementById('btn-download');
 const targetUrlInput = document.getElementById('target-url');
+const btnSaveUrl = document.getElementById('btn-save-url');
+const saveStatusEl = document.getElementById('save-status');
 const progressLineEl = document.getElementById('progress-line');
 const errorLineEl = document.getElementById('error-line');
 
 let activeLeagueId = null;
 let activeSeasonHint = null;
+
+function showSaveStatus(text = 'Saved!') {
+  if (!saveStatusEl) return;
+  saveStatusEl.textContent = text;
+  saveStatusEl.classList.add('visible');
+  setTimeout(() => {
+    saveStatusEl.classList.remove('visible');
+  }, 2000);
+}
+
+async function saveDefaultOptimizerUrl() {
+  const url = (targetUrlInput.value || '').trim();
+  if (url) {
+    try {
+      new URL(url);
+    } catch (_) {
+      setError('Please enter a valid URL (e.g. http://localhost:8080 or https://...)');
+      return;
+    }
+  }
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    await chrome.storage.local.set({
+      default_optimizer_url: url,
+      streamlit_target_url: url
+    });
+  }
+  setError('');
+  showSaveStatus(url ? 'Saved!' : 'Cleared');
+}
 
 function setButtonsDisabled(disabled) {
   if (btnSync) btnSync.disabled = disabled;
@@ -782,7 +813,8 @@ async function handleSync() {
 
   const targetUrl = (targetUrlInput.value || '').trim();
   if (!targetUrl) {
-    setError('Please enter your Optimizer URL below before syncing.');
+    setError('Please enter your default Optimizer URL below before syncing.');
+    if (targetUrlInput) targetUrlInput.focus();
     return;
   }
 
@@ -814,6 +846,7 @@ async function handleSync() {
     } catch (_) {}
 
     await chrome.storage.local.set({
+      pending_optimizer_bundle: bundle,
       pending_streamlit_bundle: bundle,
       pending_optimizer_sync: {
         league_id: String(activeLeagueId),
@@ -834,8 +867,7 @@ async function handleSync() {
       try {
         const u = new URL(t.url);
         return (u.hostname === targetUrlObj.hostname && (u.port === targetUrlObj.port || (!u.port && !targetUrlObj.port))) ||
-               (u.hostname.endsWith('.streamlit.app') && targetUrlObj.hostname.endsWith('.streamlit.app')) ||
-               (u.hostname.endsWith('.run.app') && targetUrlObj.hostname.endsWith('.run.app'));
+               (targetUrlObj.hostname && u.hostname === targetUrlObj.hostname);
       } catch (_) {
         return false;
       }
@@ -848,7 +880,7 @@ async function handleSync() {
         await chrome.windows.update(matchingTab.windowId, { focused: true });
       }
       try {
-        chrome.tabs.sendMessage(matchingTab.id, { action: 'STREAMLIT_SYNC_TRIGGER' }, () => {
+        chrome.tabs.sendMessage(matchingTab.id, { action: 'OPTIMIZER_SYNC_TRIGGER' }, () => {
           if (chrome.runtime.lastError) {}
         });
       } catch (_) {}
@@ -868,16 +900,30 @@ async function handleSync() {
 // ── Initialize Popup ─────────────────────────────────────────────────────────
 async function init() {
   try {
+    if (btnSaveUrl) {
+      btnSaveUrl.onclick = saveDefaultOptimizerUrl;
+    }
+
+    if (targetUrlInput) {
+      targetUrlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveDefaultOptimizerUrl();
+        }
+      });
+
+      targetUrlInput.addEventListener('change', () => {
+        saveDefaultOptimizerUrl();
+      });
+    }
+
     // Restore saved Optimizer URL preference
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      const stored = await chrome.storage.local.get(['streamlit_target_url']);
-      if (stored && stored.streamlit_target_url) {
-        targetUrlInput.value = stored.streamlit_target_url;
+      const stored = await chrome.storage.local.get(['default_optimizer_url', 'streamlit_target_url']);
+      const savedUrl = stored.default_optimizer_url || stored.streamlit_target_url;
+      if (savedUrl && targetUrlInput) {
+        targetUrlInput.value = savedUrl;
       }
-
-      targetUrlInput.addEventListener('input', () => {
-        chrome.storage.local.set({ streamlit_target_url: targetUrlInput.value.trim() });
-      });
     }
 
     if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.query) {
